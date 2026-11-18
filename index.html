@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>I Love You Lilo</title>
+    <link rel="icon" type="image/png" href="./favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nunito:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        background: #0b0b0d;
+        min-height: 100%;
+      }
+      body {
+        display: flex;
+        justify-content: center;
+        padding: 32px 12px 48px;
+        overflow-x: hidden;
+      }
+      #heart {
+        position: relative;
+      }
+      .t {
+        position: absolute;
+        white-space: nowrap;
+        line-height: 1.4;
+        font-family:
+          Nunito, "Noto Sans", "Noto Sans Arabic", "Noto Sans Hebrew",
+          "Noto Sans Tamil", "Noto Sans Bengali", "Noto Sans Devanagari",
+          "Noto Sans Thai", system-ui, sans-serif;
+        font-weight: 700;
+        color: var(--c);
+        opacity: 0;
+        transform: scale(1);
+        transition:
+          opacity 0.25s ease,
+          color 0.45s ease,
+          transform 0.45s ease,
+          text-shadow 0.45s ease;
+        unicode-bidi: isolate;
+      }
+      .t.visible {
+        opacity: 1;
+      }
+      .t.on {
+        color: #fff;
+        transform: scale(1.7);
+        text-shadow:
+          0 0 14px #ff3b3b,
+          0 0 28px #ff3b3b88;
+        z-index: 5;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .t {
+          transition: none;
+        }
+        .t.on {
+          transform: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="heart"></div>
+
+    <script>
+      const PHRASES = [
+        "Я тебе кохаю, Ліло",
+        "Ti amo, Lilo",
+        "دوستت دارم، لیلو",
+        "Rakastan sinua, Lilo",
+        "愛してるよ、リロ",
+        "நான் உன்னை காதலிக்கிறேன், லிலோ",
+        "我爱你，莉洛",
+        "I love you, Lilo",
+        "Σ’ αγαπώ, Λίλο",
+        "사랑해, 릴로",
+        "مجھے تم سے محبت ہے، لیلو",
+        "Anh yêu em, Lilo",
+        "Mahal kita, Lilo",
+        "אני אוהב אותך, לילו",
+        "Aku cinta kamu, Lilo",
+        "আমি তোমাকে ভালোবাসি, লিলো",
+        "Jag älskar dig, Lilo",
+        "Eu te amo, Lilo",
+        "ฉันรักเธอ, ลิโล",
+        "Nakupenda, Lilo",
+        "Ik hou van je, Lilo",
+        "मैं तुमसे प्यार करता हूँ, लिलो",
+        "Je t’aime, Lilo",
+        "Aloha au iā ʻoe, Lilo",
+        "Te quiero, Lilo",
+        "أحبك يا ليلو",
+        "Kocham cię, Lilo",
+        "Seni seviyorum, Lilo",
+        "Ich liebe dich, Lilo",
+        "Я люблю тебя, Лило",
+      ];
+      const COLORS = ["#ff3b30", "#ff5a4d", "#ff6b5e", "#e8564b", "#ff4d4d"];
+
+      const uniquePhrases = new Set(PHRASES);
+
+      if (uniquePhrases.size !== PHRASES.length) {
+        console.warn("Duplicate phrases detected!");
+      }
+
+      const heart = document.getElementById("heart");
+      let hoverTimer = null;
+      let startTimer = null;
+      let sequenceTimer = null;
+
+      // implicit heart curve
+      const inside = (x, y) =>
+        Math.pow(x * x + y * y - 1, 3) - x * x * y * y * y <= 0;
+
+      function shuffle(a) {
+        a = a.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+      }
+
+      // horizontal intervals (in px, relative to heart box) that are inside the heart for BOTH row edges
+      function intervals(py0, py1, S, cx, cy, W) {
+        const res = [];
+        let start = null;
+        for (let px = 0; px <= W; px += 2) {
+          const x = (px - cx) / S;
+          const ok = inside(x, (cy - py0) / S) && inside(x, (cy - py1) / S);
+          if (ok && start === null) start = px;
+          if (!ok && start !== null) {
+            res.push([start, px]);
+            start = null;
+          }
+        }
+        if (start !== null) res.push([start, W]);
+        return res;
+      }
+
+      function build() {
+        clearTimeout(startTimer);
+        clearTimeout(sequenceTimer);
+        clearInterval(hoverTimer);
+        heart.innerHTML = "";
+
+        const W = Math.min(window.innerWidth - 24, 1000);
+        const S = W / 2.3; // heart spans about ±1.14 in x
+        const H = Math.round(S * 2.36);
+        const cx = W / 2;
+        const cy = S * 1.28; // pixel y of heart's y=0
+        const fontSize = Math.max(10, Math.min(17, W * 0.0165));
+        const rowH = fontSize * 1.65;
+        const minGap = fontSize * 0.9;
+        const pad = fontSize * 0.4;
+
+        heart.style.width = W + "px";
+        heart.style.height = H + "px";
+
+        // measurer
+        const measure = {};
+        const probe = document.createElement("span");
+        probe.className = "t";
+        probe.style.cssText = `visibility:hidden;animation:none;opacity:1;font-size:${fontSize}px`;
+        heart.appendChild(probe);
+        PHRASES.forEach((p) => {
+          probe.textContent = p;
+          measure[p] = probe.offsetWidth;
+        });
+        heart.removeChild(probe);
+        const minW = Math.min(...Object.values(measure));
+
+        const all = [];
+        let rowIndex = 0;
+
+        const usedPhrases = new Set();
+
+        for (let top = 0; top + rowH <= H; top += rowH) {
+          const segs = intervals(top, top + rowH, S, cx, cy, W);
+          segs.forEach(([a, b]) => {
+            const L = a + pad,
+              R = b - pad,
+              avail = R - L;
+            if (avail < minW) return;
+
+            // pick phrases that fit, random, no repeats within the row
+            let pool = shuffle(PHRASES),
+              chosen = [],
+              used = 0;
+            while (true) {
+              const room = avail - used - (chosen.length ? minGap : 0);
+              const fits = pool.filter((p) => measure[p] <= room);
+              if (!fits.length) break;
+              // prefer the widest that fits so the row ends up well filled
+              fits.sort((x, y) => measure[y] - measure[x]);
+              const pick =
+                fits[Math.floor(Math.random() * Math.min(3, fits.length))];
+              chosen.push(pick);
+              used += measure[pick] + (chosen.length > 1 ? minGap : 0);
+              pool = pool.filter((p) => p !== pick);
+            }
+            if (!chosen.length) return;
+
+            chosen = shuffle(chosen);
+            const sum = chosen.reduce((s, p) => s + measure[p], 0);
+            const gap =
+              chosen.length > 1 ? (avail - sum) / (chosen.length - 1) : 0;
+            let x = chosen.length > 1 ? L : L + (avail - sum) / 2;
+
+            chosen.forEach((p) => {
+              const el = document.createElement("b");
+              el.className = "t";
+              el.dir = "auto";
+              el.textContent = p;
+              el.style.left = x + "px";
+              el.style.top = top + (rowH - fontSize * 1.4) / 2 + "px";
+              el.style.fontSize = fontSize + "px";
+              el.style.setProperty(
+                "--c",
+                COLORS[Math.floor(Math.random() * COLORS.length)],
+              );
+              heart.appendChild(el);
+              all.push(el);
+              x += measure[p] + gap;
+            });
+          });
+          rowIndex++;
+        }
+
+        // Sequential reveal + random highlight + hover
+
+        let currentHighlighted = null;
+        let hoveredElement = null;
+
+        let revealIndex = 0;
+        let completed = false;
+
+        // Highlight only one phrase
+        const highlight = (el) => {
+          if (currentHighlighted === el) return;
+
+          if (currentHighlighted) {
+            currentHighlighted.classList.remove("on");
+          }
+
+          el.classList.add("on");
+          currentHighlighted = el;
+        };
+
+        // Random highlight
+        const randomHighlight = () => {
+          if (hoveredElement || !all.length) return;
+
+          let next;
+
+          do {
+            next = all[Math.floor(Math.random() * all.length)];
+          } while (next === currentHighlighted && all.length > 1);
+
+          highlight(next);
+        };
+
+        // Start random effect
+        const startRandomHighlight = () => {
+          clearInterval(hoverTimer);
+
+          if (hoveredElement) return;
+
+          randomHighlight();
+
+          hoverTimer = setInterval(randomHighlight, 900);
+        };
+
+        // Mouse hover
+        all.forEach((el) => {
+          el.addEventListener("mouseenter", () => {
+            hoveredElement = el;
+            clearInterval(hoverTimer);
+            highlight(el);
+          });
+
+          el.addEventListener("mouseleave", () => {
+            hoveredElement = null;
+
+            if (completed) {
+              startRandomHighlight();
+            }
+          });
+        });
+
+        // Reveal phrases one by one
+        const revealNext = () => {
+          if (revealIndex >= all.length) {
+            completed = true;
+
+            if (!hoveredElement) {
+              startRandomHighlight();
+            }
+
+            return;
+          }
+
+          const el = all[revealIndex];
+
+          el.classList.add("visible");
+
+          if (!hoveredElement) {
+            highlight(el);
+          }
+
+          revealIndex++;
+
+          sequenceTimer = setTimeout(revealNext, 100);
+        };
+
+        // Start
+        revealNext();
+      }
+
+      build();
+      let rz;
+      window.addEventListener("resize", () => {
+        clearTimeout(rz);
+        rz = setTimeout(build, 250);
+      });
+    </script>
+  </body>
+</html>
